@@ -167,15 +167,40 @@ function updateMetrics(data) {
     }, 0);
     document.getElementById('metric-total-activities').textContent = formatNumber(totalActivities);
 
+    // Sort a copy of data by activities descending to ensure correct relative rankings
+    const sortedByActivities = [...data].sort((a, b) => {
+        const actA = parseInt(a.activities) || 0;
+        const actB = parseInt(b.activities) || 0;
+        return actB - actA;
+    });
+
     // Find Zagazig National University specifically (matching 'الزقازيق' and 'اهلي' to separate from public university)
-    const znuData = data.find(univ => univ.name.includes('الزقازيق') && (univ.name.includes('اهلي') || univ.name.includes('أهلي')));
+    const znuIndex = sortedByActivities.findIndex(univ => univ.name.includes('الزقازيق') && (univ.name.includes('اهلي') || univ.name.includes('أهلي')));
+    const znuData = znuIndex !== -1 ? sortedByActivities[znuIndex] : null;
 
     if (znuData) {
         document.getElementById('metric-znu-rank').textContent = `#${znuData.rank}`;
         document.getElementById('metric-znu-activities').textContent = formatNumber(znuData.activities);
+
+        // Calculate gap to the university directly above ZNU
+        if (znuIndex > 0) {
+            const competitor = sortedByActivities[znuIndex - 1];
+            const znuAct = parseInt(znuData.activities) || 0;
+            const compAct = parseInt(competitor.activities) || 0;
+            const gap = compAct - znuAct + 1; // +1 to exceed / bypass
+
+            document.getElementById('metric-znu-gap').textContent = formatNumber(gap);
+            document.getElementById('metric-gap-subtitle').textContent = `لتخطي ${competitor.name} (${formatNumber(compAct)} نشاط)`;
+        } else {
+            // ZNU is at rank 1 (index 0)
+            document.getElementById('metric-znu-gap').textContent = '0';
+            document.getElementById('metric-gap-subtitle').textContent = 'الزقازيق الأهلية في الصدارة! 🎉';
+        }
     } else {
         document.getElementById('metric-znu-rank').textContent = 'غير مدرج';
         document.getElementById('metric-znu-activities').textContent = '-';
+        document.getElementById('metric-znu-gap').textContent = '-';
+        document.getElementById('metric-gap-subtitle').textContent = 'الجامعة غير مدرجة في البيانات';
     }
 }
 

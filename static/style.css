@@ -310,6 +310,25 @@ body {
     text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
+/* Gap card specific highlighting (blue/indigo accent) */
+.metric-card.gap-card {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(37, 99, 235, 0.05) 100%);
+    border-color: rgba(59, 130, 246, 0.25);
+    box-shadow: 0 10px 25px rgba(59, 130, 246, 0.05);
+}
+
+.metric-card.gap-card:hover {
+    box-shadow: 0 15px 30px rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+.metric-card.gap-card .card-icon {
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    color: var(--accent-blue);
+    text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
 /* Table Area */
 .table-section {
     background: var(--glass-bg);
