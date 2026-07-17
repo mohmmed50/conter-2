@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة إحصائيات النشاط الطلابي</title>
+    <!-- Google Fonts: Cairo for Arabic text and Inter for numbers/latin text -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <!-- Glowing background elements for premium feel -->
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+    <div class="glow-orb orb-3"></div>
+
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="header-main">
+                <div class="logo-area">
+                    <div class="logo-icon">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                    </div>
+                    <div>
+                        <h1>بوابة الإحصائيات الجامعية</h1>
+                        <p class="subtitle">تقرير الأنشطة الطلابية لوزارة التعليم العالي والبحث العلمي</p>
+                    </div>
+                </div>
+                
+                <!-- Status Badge -->
+                <div class="status-panel">
+                    <div class="status-badge" id="status-badge">
+                        <span class="status-dot"></span>
+                        <span class="status-text" id="status-text">جاري الاتصال...</span>
+                    </div>
+                    <div class="refresh-countdown">
+                        <span>يحدث خلال:</span>
+                        <div class="countdown-bar">
+                            <div class="countdown-progress" id="countdown-progress"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Stale / Error Alert Banners -->
+        <div id="alert-banner" class="alert-banner hidden">
+            <i class="fa-solid fa-circle-exclamation alert-icon"></i>
+            <span id="alert-message">تعذر الاتصال بالنظام الجامعي. البيانات المعروضة قد تكون قديمة.</span>
+        </div>
+
+        <!-- Metrics Section -->
+        <section class="metrics-grid">
+            <!-- Card 1: Total Universities Scraped -->
+            <div class="metric-card">
+                <div class="card-icon"><i class="fa-solid fa-university"></i></div>
+                <div class="card-info">
+                    <h3>إجمالي الجامعات</h3>
+                    <div class="card-value font-inter" id="metric-total-univ">-</div>
+                </div>
+            </div>
+
+            <!-- Card 2: Total Activities -->
+            <div class="metric-card">
+                <div class="card-icon accent-blue"><i class="fa-solid fa-chart-line"></i></div>
+                <div class="card-info">
+                    <h3>إجمالي الأنشطة المقدمة</h3>
+                    <div class="card-value font-inter" id="metric-total-activities">-</div>
+                </div>
+            </div>
+
+            <!-- Card 3: Zagazig National University Rank -->
+            <div class="metric-card highlighted-card">
+                <div class="card-icon"><i class="fa-solid fa-trophy"></i></div>
+                <div class="card-info">
+                    <h3>ترتيب جامعة الزقازيق الأهلية</h3>
+                    <div class="card-value font-inter" id="metric-znu-rank">-</div>
+                </div>
+            </div>
+
+            <!-- Card 4: Zagazig National University Activities -->
+            <div class="metric-card highlighted-card">
+                <div class="card-icon"><i class="fa-solid fa-star"></i></div>
+                <div class="card-info">
+                    <h3>أنشطة الزقازيق الأهلية</h3>
+                    <div class="card-value font-inter" id="metric-znu-activities">-</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Content (Table) -->
+        <main class="table-section">
+            <div class="table-header-controls">
+                <h2>ترتيب الجامعات المصرية</h2>
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="search-input" placeholder="ابحث عن جامعة...">
+                </div>
+            </div>
+
+            <div class="table-wrapper">
+                <table id="stats-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable sorted-asc" data-sort="rank">
+                                الترتيب <i class="fa-solid fa-sort"></i>
+                            </th>
+                            <th class="sortable text-right" data-sort="name">
+                                اسم الجامعة <i class="fa-solid fa-sort"></i>
+                            </th>
+                            <th class="sortable" data-sort="activities">
+                                عدد الأنشطة <i class="fa-solid fa-sort"></i>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <tr>
+                            <td colspan="3" class="loading-state">
+                                <div class="spinner"></div>
+                                <p>جاري جلب إحصائيات الجامعات مباشرة من النظام...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="dashboard-footer">
+            <div class="footer-left">
+                <span class="update-label"><i class="fa-regular fa-clock"></i> آخر تحديث للبيانات:</span>
+                <span id="last-updated" class="font-inter">--:--:--</span>
+            </div>
+            <div class="footer-right">
+                <p>نظام الرصد الذكي للجامعات &copy; 2026</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
