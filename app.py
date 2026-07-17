@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 import datetime
@@ -167,9 +168,24 @@ def background_scraper_thread():
         scrape_and_update()
         time.sleep(5)
 
-# Initialize and start background thread
-worker = threading.Thread(target=background_scraper_thread, daemon=True)
-worker.start()
+# Check if running in a Serverless environment (like Vercel)
+IS_VERCEL = os.environ.get('VERCEL') is not None
+
+if not IS_VERCEL:
+    # Initialize and start background thread for local environments
+    worker = threading.Thread(target=background_scraper_thread, daemon=True)
+    worker.start()
+
+def get_cache_age_seconds():
+    """Calculates the age of the cached data in seconds."""
+    with cache_lock:
+        if not stats_cache["last_updated"]:
+            return 999999
+        try:
+            last_updated_time = datetime.datetime.strptime(stats_cache["last_updated"], "%Y-%m-%d %H:%M:%S")
+            return (datetime.datetime.now() - last_updated_time).total_seconds()
+        except Exception:
+            return 999999
 
 @app.route('/')
 def index():
@@ -179,6 +195,12 @@ def index():
 @app.route('/api/stats')
 def get_stats():
     """Returns the cached statistics as JSON."""
+    if IS_VERCEL:
+        # On serverless (Vercel), we fetch synchronously if cache is empty or older than 10 seconds
+        if get_cache_age_seconds() > 10:
+            logger.info("Vercel environment: Cache expired. Scraping synchronously...")
+            scrape_and_update()
+            
     with cache_lock:
         return jsonify(stats_cache)
 
