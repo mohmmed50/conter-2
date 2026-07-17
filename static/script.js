@@ -156,17 +156,6 @@ function updateStatusBadge(status, errorMessage) {
  * Updates dashboard metric counters.
  */
 function updateMetrics(data) {
-    // 1. Total Universities
-    const totalUniv = data.length;
-    document.getElementById('metric-total-univ').textContent = formatNumber(totalUniv);
-
-    // 2. Total Activities
-    const totalActivities = data.reduce((acc, curr) => {
-        const val = parseInt(curr.activities);
-        return acc + (isNaN(val) ? 0 : val);
-    }, 0);
-    document.getElementById('metric-total-activities').textContent = formatNumber(totalActivities);
-
     // Sort a copy of data by activities descending to ensure correct relative rankings
     const sortedByActivities = [...data].sort((a, b) => {
         const actA = parseInt(a.activities) || 0;
