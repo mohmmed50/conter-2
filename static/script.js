@@ -180,11 +180,11 @@ function updateMetrics(data) {
 }
 
 /**
- * Formats raw numbers to Arabic locale string
+ * Formats raw numbers to English locale string
  */
 function formatNumber(num) {
     if (num === null || num === undefined || isNaN(num)) return '-';
-    return Number(num).toLocaleString('ar-EG');
+    return Number(num).toLocaleString('en-US');
 }
 
 /**
