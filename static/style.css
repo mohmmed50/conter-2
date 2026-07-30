@@ -793,6 +793,89 @@ body.modal-open {
     }
 }
 
+/* Flagged-for-deletion feature */
+.header-controls-right {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+}
+
+.flagged-trigger-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--accent-gold);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+
+.flagged-trigger-btn:hover {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.5);
+}
+
+.flagged-badge {
+    background: var(--accent-gold);
+    color: #1a1200;
+    font-weight: 800;
+    font-size: 0.75rem;
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
+    font-family: var(--font-inter);
+}
+
+.flagged-hint {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    line-height: 1.7;
+}
+
+.page-btn-danger {
+    color: var(--accent-red);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.page-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.detail-delete-section {
+    border-top: 1px dashed var(--glass-border);
+    padding-top: 1.25rem;
+    margin-top: 0.5rem;
+    display: flex;
+    justify-content: center;
+}
+
+.flag-delete-btn {
+    width: 100%;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    font-family: var(--font-cairo);
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+}
+
+.flag-delete-btn:hover {
+    background: rgba(239, 68, 68, 0.16);
+}
+
+.flag-delete-btn.flagged {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: var(--accent-gold);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .header-main {

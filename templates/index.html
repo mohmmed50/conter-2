@@ -147,7 +147,13 @@
                         <i class="fa-solid fa-magnifying-glass search-icon"></i>
                         <input type="text" id="activity-search-input" placeholder="ابحث عن نشاط...">
                     </div>
-                    <div id="activities-count-label" class="count-label"></div>
+                    <div class="header-controls-right">
+                        <div id="activities-count-label" class="count-label"></div>
+                        <button id="open-flagged-btn" class="page-btn flagged-trigger-btn">
+                            <i class="fa-solid fa-flag"></i> المحدد للحذف
+                            <span id="flagged-count-badge" class="flagged-badge">0</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="table-wrapper">
                     <table id="activities-table">
@@ -182,6 +188,42 @@
             </div>
             <div class="modal-body" id="activity-detail-body">
                 <div class="loading-state"><div class="spinner"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flagged-for-Deletion Review Modal -->
+    <div id="flagged-modal" class="modal-overlay hidden">
+        <div class="modal-box modal-large">
+            <div class="modal-header">
+                <h2><i class="fa-solid fa-flag"></i> الأنشطة المحددة للحذف</h2>
+                <button class="modal-close" id="flagged-modal-close" aria-label="إغلاق">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="flagged-hint">
+                    القائمة دي محفوظة في متصفحك بس (مش على الموقع) — لما تخلص مراجعة، اضغط "تنزيل CSV"
+                    وابعت الملف عشان يتم الحذف الفعلي.
+                </p>
+                <div class="table-header-controls">
+                    <div id="flagged-count-label" class="count-label"></div>
+                    <div class="header-controls-right">
+                        <button id="export-flagged-btn" class="page-btn"><i class="fa-solid fa-download"></i> تنزيل CSV</button>
+                        <button id="clear-flagged-btn" class="page-btn page-btn-danger"><i class="fa-solid fa-trash"></i> إفراغ القائمة</button>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table id="flagged-table">
+                        <thead>
+                            <tr>
+                                <th class="text-right">اسم النشاط</th>
+                                <th>رقم النشاط</th>
+                                <th>عدد الطلاب</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="flagged-table-body"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

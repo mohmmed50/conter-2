@@ -42,12 +42,124 @@ function prefetchNextPage() {
         });
 }
 
+// ---- Flagged-for-deletion list (stored client-side only, in this browser) ----
+const FLAGGED_STORAGE_KEY = 'znu_flagged_for_deletion';
+
+function getFlaggedList() {
+    try {
+        return JSON.parse(localStorage.getItem(FLAGGED_STORAGE_KEY)) || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveFlaggedList(list) {
+    localStorage.setItem(FLAGGED_STORAGE_KEY, JSON.stringify(list));
+    updateFlaggedBadge();
+}
+
+function isFlagged(activityId) {
+    return getFlaggedList().some((a) => a.id === activityId);
+}
+
+function toggleFlag(activity) {
+    const list = getFlaggedList();
+    const idx = list.findIndex((a) => a.id === activity.id);
+    if (idx >= 0) {
+        list.splice(idx, 1);
+    } else {
+        list.push(activity);
+    }
+    saveFlaggedList(list);
+    return idx < 0; // true = just flagged, false = just unflagged
+}
+
+function removeFlagged(activityId) {
+    saveFlaggedList(getFlaggedList().filter((a) => a.id !== activityId));
+    renderFlaggedTable();
+}
+
+function updateFlaggedBadge() {
+    const count = getFlaggedList().length;
+    const badge = document.getElementById('flagged-count-badge');
+    if (badge) badge.textContent = count;
+}
+
+function openFlaggedModal() {
+    document.getElementById('flagged-modal').classList.remove('hidden');
+    document.body.classList.add('modal-open');
+    renderFlaggedTable();
+}
+
+function closeFlaggedModal() {
+    document.getElementById('flagged-modal').classList.add('hidden');
+    document.body.classList.remove('modal-open');
+}
+
+function renderFlaggedTable() {
+    const list = getFlaggedList();
+    const tbody = document.getElementById('flagged-table-body');
+    document.getElementById('flagged-count-label').textContent = `إجمالي المحدد للحذف: ${list.length}`;
+
+    if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">لسه مفيش أي نشاط محدد للحذف.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = list.map((a) => `
+        <tr>
+            <td class="text-right">${escapeHtml(a.name || '-')}</td>
+            <td class="font-inter">${escapeHtml(a.id)}</td>
+            <td class="font-inter">${escapeHtml(String(a.students ?? '-'))}</td>
+            <td><button class="page-btn page-btn-danger remove-flag-btn" data-id="${escapeHtml(a.id)}"><i class="fa-solid fa-xmark"></i></button></td>
+        </tr>
+    `).join('');
+
+    tbody.querySelectorAll('.remove-flag-btn').forEach((btn) => {
+        btn.addEventListener('click', () => removeFlagged(btn.dataset.id));
+    });
+}
+
+function exportFlaggedCsv() {
+    const list = getFlaggedList();
+    if (!list.length) return;
+
+    const header = ['activity_id', 'name', 'start_date', 'end_date', 'students'];
+    const escapeCsv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [header.join(',')];
+    list.forEach((a) => {
+        lines.push([a.id, a.name, a.start_date, a.end_date, a.students].map(escapeCsv).join(','));
+    });
+
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `activities_to_delete_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const activitiesModal = document.getElementById('activities-modal');
     const detailModal = document.getElementById('activity-detail-modal');
+    const flaggedModal = document.getElementById('flagged-modal');
+
+    updateFlaggedBadge();
 
     document.getElementById('activities-modal-close').addEventListener('click', closeActivitiesModal);
     document.getElementById('activity-detail-modal-close').addEventListener('click', closeActivityDetailModal);
+    document.getElementById('flagged-modal-close').addEventListener('click', closeFlaggedModal);
+    document.getElementById('open-flagged-btn').addEventListener('click', openFlaggedModal);
+    document.getElementById('export-flagged-btn').addEventListener('click', exportFlaggedCsv);
+    document.getElementById('clear-flagged-btn').addEventListener('click', () => {
+        if (confirm('هل أنت متأكد من إفراغ قائمة الأنشطة المحددة للحذف بالكامل؟')) {
+            saveFlaggedList([]);
+            renderFlaggedTable();
+        }
+    });
 
     activitiesModal.addEventListener('click', (e) => {
         if (e.target === activitiesModal) closeActivitiesModal();
@@ -55,10 +167,14 @@ document.addEventListener('DOMContentLoaded', () => {
     detailModal.addEventListener('click', (e) => {
         if (e.target === detailModal) closeActivityDetailModal();
     });
+    flaggedModal.addEventListener('click', (e) => {
+        if (e.target === flaggedModal) closeFlaggedModal();
+    });
 
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
         if (!detailModal.classList.contains('hidden')) closeActivityDetailModal();
+        else if (!flaggedModal.classList.contains('hidden')) closeFlaggedModal();
         else if (!activitiesModal.classList.contains('hidden')) closeActivitiesModal();
     });
 
@@ -254,7 +370,37 @@ function renderActivityDetail(d) {
             <h4><i class="fa-solid fa-paperclip"></i> المرفقات</h4>
             <div class="attachments-list">${attachmentsHtml}</div>
         </div>
+
+        <div class="detail-delete-section">
+            <button id="flag-delete-btn" class="flag-delete-btn"></button>
+        </div>
     `;
+
+    const flagBtn = document.getElementById('flag-delete-btn');
+    const flaggedActivity = {
+        id: d.id,
+        name: d.name,
+        start_date: d.start_date,
+        end_date: d.end_date,
+        students: d.students_total,
+    };
+
+    const paintFlagButton = () => {
+        if (isFlagged(d.id)) {
+            flagBtn.classList.add('flagged');
+            flagBtn.innerHTML = '<i class="fa-solid fa-flag-checkered"></i> محدد للحذف — اضغط لإلغاء التحديد';
+        } else {
+            flagBtn.classList.remove('flagged');
+            flagBtn.innerHTML = '<i class="fa-regular fa-flag"></i> هل تود حذف هذا النشاط؟';
+        }
+    };
+
+    flagBtn.addEventListener('click', () => {
+        toggleFlag(flaggedActivity);
+        paintFlagButton();
+    });
+
+    paintFlagButton();
 }
 
 function escapeHtml(str) {
