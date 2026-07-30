@@ -3,12 +3,44 @@
 
 const activitiesState = {
     start: 0,
-    length: 25,
+    length: 50,
     search: '',
     recordsTotal: 0,
 };
 
 let activitySearchDebounce = null;
+
+// Prefetch cache: keyed by `${search}::${start}` -> the page payload, so the next
+// page is usually already sitting in memory by the time the user clicks "next".
+const activitiesPageCache = new Map();
+
+function cacheKey(search, start) {
+    return `${search}::${start}`;
+}
+
+function fetchActivitiesPage(start, length, search) {
+    const params = new URLSearchParams({ start, length, search });
+    return fetch(`/api/university-activities?${params.toString()}`).then((r) => r.json());
+}
+
+function prefetchNextPage() {
+    const nextStart = activitiesState.start + activitiesState.length;
+    if (activitiesState.recordsTotal && nextStart >= activitiesState.recordsTotal) return;
+
+    const key = cacheKey(activitiesState.search, nextStart);
+    if (activitiesPageCache.has(key)) return;
+
+    fetchActivitiesPage(nextStart, activitiesState.length, activitiesState.search)
+        .then((data) => {
+            if (data.status === 'success') {
+                activitiesPageCache.set(key, data);
+            }
+        })
+        .catch(() => {
+            // Silent failure: prefetching is a background optimization, the user
+            // will simply get a normal (non-cached) fetch if this didn't work out.
+        });
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     const activitiesModal = document.getElementById('activities-modal');
@@ -50,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
         activitySearchDebounce = setTimeout(() => {
             activitiesState.search = value;
             activitiesState.start = 0;
+            activitiesPageCache.clear();
             loadActivities();
         }, 450);
     });
@@ -60,6 +93,7 @@ function openActivitiesModal() {
     document.body.classList.add('modal-open');
     activitiesState.start = 0;
     activitiesState.search = '';
+    activitiesPageCache.clear();
     document.getElementById('activity-search-input').value = '';
     loadActivities();
 }
@@ -79,28 +113,36 @@ function closeActivityDetailModal() {
 
 function loadActivities() {
     const tbody = document.getElementById('activities-table-body');
+    const key = cacheKey(activitiesState.search, activitiesState.start);
+    const cached = activitiesPageCache.get(key);
+
+    if (cached) {
+        // Already prefetched: render instantly, no spinner, no network round-trip.
+        activitiesPageCache.delete(key);
+        applyActivitiesPage(cached);
+        return;
+    }
+
     tbody.innerHTML = `<tr><td colspan="4" class="loading-state"><div class="spinner"></div><p>جاري جلب الأنشطة من النظام...</p></td></tr>`;
 
-    const params = new URLSearchParams({
-        start: activitiesState.start,
-        length: activitiesState.length,
-        search: activitiesState.search,
-    });
-
-    fetch(`/api/university-activities?${params.toString()}`)
-        .then((r) => r.json())
+    fetchActivitiesPage(activitiesState.start, activitiesState.length, activitiesState.search)
         .then((data) => {
             if (data.status !== 'success') {
                 tbody.innerHTML = `<tr><td colspan="4" class="empty-state">تعذر جلب الأنشطة: ${escapeHtml(data.error_message || 'خطأ غير معروف')}</td></tr>`;
                 return;
             }
-            activitiesState.recordsTotal = data.recordsFiltered || data.recordsTotal || 0;
-            renderActivitiesTable(data.data || []);
-            updateActivitiesPaginationInfo();
+            applyActivitiesPage(data);
         })
         .catch((err) => {
             tbody.innerHTML = `<tr><td colspan="4" class="empty-state">تعذر الاتصال بالخادم: ${escapeHtml(err.message)}</td></tr>`;
         });
+}
+
+function applyActivitiesPage(data) {
+    activitiesState.recordsTotal = data.recordsFiltered || data.recordsTotal || 0;
+    renderActivitiesTable(data.data || []);
+    updateActivitiesPaginationInfo();
+    prefetchNextPage();
 }
 
 function renderActivitiesTable(rows) {
