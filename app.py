@@ -61,9 +61,23 @@ REQUEST_HEADERS = {
 session = requests.Session()
 is_authenticated = False
 
+def _snippet(text, n=200):
+    """Returns a short, single-line preview of a response body for diagnostics."""
+    flat = " ".join((text or "").split())
+    return flat[:n]
+
+
 def do_login(sess):
     """Performs the POST login request to authenticate the session."""
     global is_authenticated
+
+    if not USERNAME or not PASSWORD:
+        is_authenticated = False
+        raise Exception(
+            "Missing credentials: SCU_USERNAME / SCU_PASSWORD environment variables "
+            "are not set on this deployment."
+        )
+
     logger.info("Attempting login to university system...")
     payload = {
         "username": USERNAME,
@@ -76,18 +90,23 @@ def do_login(sess):
 
     # We send the login payload. The form fields are 'username' and 'password' (no CSRF found).
     r = sess.post(LOGIN_URL, data=payload, headers=headers, verify=False, timeout=15)
+    logger.info(f"Login POST -> status={r.status_code}, final_url={r.url}, body_len={len(r.text)}")
 
     if r.status_code != 200:
         is_authenticated = False
-        raise Exception(f"Login failed: HTTP status code {r.status_code}")
+        raise Exception(f"Login failed: HTTP status code {r.status_code} (body: {_snippet(r.text)})")
 
     # Check if login was rejected by reading the HTML content
     if "اسم المستخدم" in r.text and "كلمة المرور" in r.text and ("خطأ" in r.text or "Error" in r.text or "عفواً" in r.text):
         is_authenticated = False
-        raise Exception("Login failed: Invalid credentials or account blocked")
+        raise Exception(f"Login failed: Invalid credentials or account blocked (body: {_snippet(r.text)})")
+
+    # Sanity check: a successful login should leave us off the login page with some cookies set
+    if not sess.cookies:
+        logger.warning("Login response looked OK but no cookies were set on the session.")
 
     is_authenticated = True
-    logger.info("Login successful. Session cookies established.")
+    logger.info(f"Login successful. Session cookies: {list(sess.cookies.keys())}")
     return True
 
 def ensure_authenticated():
@@ -112,6 +131,7 @@ def scrape_and_update():
         # 2. Fetch the statistics page
         logger.info("Fetching university statistics page...")
         r = session.get(STATS_URL, headers=headers, verify=False, timeout=15)
+        logger.info(f"Stats GET -> status={r.status_code}, final_url={r.url}, body_len={len(r.text)}")
 
         # 3. Handle possible session expiry (redirect or login form elements returned)
         soup = BeautifulSoup(r.text, 'html.parser')
@@ -124,11 +144,15 @@ def scrape_and_update():
             # Re-fetch stats page
             logger.info("Re-fetching statistics page after login...")
             r = session.get(STATS_URL, headers=headers, verify=False, timeout=15)
+            logger.info(f"Stats GET (retry) -> status={r.status_code}, final_url={r.url}, body_len={len(r.text)}")
             soup = BeautifulSoup(r.text, 'html.parser')
             table = soup.find('table')
 
         if not table:
-            raise Exception("HTML table element not found on statistics page")
+            raise Exception(
+                f"HTML table element not found on statistics page "
+                f"(status={r.status_code}, url={r.url}, body: {_snippet(r.text)})"
+            )
 
         # 4. Parse the table rows
         rows = table.find_all('tr')
