@@ -1,0 +1,226 @@
+// Activities feature: browsing + detail modals for Zagazig National University.
+// Triggered by clicking the highlighted ZNU row in the main rankings table.
+
+const activitiesState = {
+    start: 0,
+    length: 25,
+    search: '',
+    recordsTotal: 0,
+};
+
+let activitySearchDebounce = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const activitiesModal = document.getElementById('activities-modal');
+    const detailModal = document.getElementById('activity-detail-modal');
+
+    document.getElementById('activities-modal-close').addEventListener('click', closeActivitiesModal);
+    document.getElementById('activity-detail-modal-close').addEventListener('click', closeActivityDetailModal);
+
+    activitiesModal.addEventListener('click', (e) => {
+        if (e.target === activitiesModal) closeActivitiesModal();
+    });
+    detailModal.addEventListener('click', (e) => {
+        if (e.target === detailModal) closeActivityDetailModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (!detailModal.classList.contains('hidden')) closeActivityDetailModal();
+        else if (!activitiesModal.classList.contains('hidden')) closeActivitiesModal();
+    });
+
+    document.getElementById('activities-prev-btn').addEventListener('click', () => {
+        if (activitiesState.start - activitiesState.length >= 0) {
+            activitiesState.start -= activitiesState.length;
+            loadActivities();
+        }
+    });
+
+    document.getElementById('activities-next-btn').addEventListener('click', () => {
+        if (activitiesState.start + activitiesState.length < activitiesState.recordsTotal) {
+            activitiesState.start += activitiesState.length;
+            loadActivities();
+        }
+    });
+
+    document.getElementById('activity-search-input').addEventListener('input', (e) => {
+        clearTimeout(activitySearchDebounce);
+        const value = e.target.value.trim();
+        activitySearchDebounce = setTimeout(() => {
+            activitiesState.search = value;
+            activitiesState.start = 0;
+            loadActivities();
+        }, 450);
+    });
+});
+
+function openActivitiesModal() {
+    document.getElementById('activities-modal').classList.remove('hidden');
+    document.body.classList.add('modal-open');
+    activitiesState.start = 0;
+    activitiesState.search = '';
+    document.getElementById('activity-search-input').value = '';
+    loadActivities();
+}
+
+function closeActivitiesModal() {
+    document.getElementById('activities-modal').classList.add('hidden');
+    document.body.classList.remove('modal-open');
+}
+
+function openActivityDetailModal() {
+    document.getElementById('activity-detail-modal').classList.remove('hidden');
+}
+
+function closeActivityDetailModal() {
+    document.getElementById('activity-detail-modal').classList.add('hidden');
+}
+
+function loadActivities() {
+    const tbody = document.getElementById('activities-table-body');
+    tbody.innerHTML = `<tr><td colspan="4" class="loading-state"><div class="spinner"></div><p>جاري جلب الأنشطة من النظام...</p></td></tr>`;
+
+    const params = new URLSearchParams({
+        start: activitiesState.start,
+        length: activitiesState.length,
+        search: activitiesState.search,
+    });
+
+    fetch(`/api/university-activities?${params.toString()}`)
+        .then((r) => r.json())
+        .then((data) => {
+            if (data.status !== 'success') {
+                tbody.innerHTML = `<tr><td colspan="4" class="empty-state">تعذر جلب الأنشطة: ${escapeHtml(data.error_message || 'خطأ غير معروف')}</td></tr>`;
+                return;
+            }
+            activitiesState.recordsTotal = data.recordsFiltered || data.recordsTotal || 0;
+            renderActivitiesTable(data.data || []);
+            updateActivitiesPaginationInfo();
+        })
+        .catch((err) => {
+            tbody.innerHTML = `<tr><td colspan="4" class="empty-state">تعذر الاتصال بالخادم: ${escapeHtml(err.message)}</td></tr>`;
+        });
+}
+
+function renderActivitiesTable(rows) {
+    const tbody = document.getElementById('activities-table-body');
+    tbody.innerHTML = '';
+
+    if (!rows.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="empty-state">
+                    <i class="fa-regular fa-folder-open" style="font-size: 1.8rem; margin-bottom: 0.5rem; display: block; opacity: 0.5;"></i>
+                    لا توجد أنشطة مطابقة.
+                </td>
+            </tr>`;
+        return;
+    }
+
+    rows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.classList.add('clickable-row');
+        tr.title = 'اضغط لعرض تفاصيل النشاط';
+        tr.innerHTML = `
+            <td class="text-right">${escapeHtml(row.name || '-')}</td>
+            <td class="font-inter">${escapeHtml(row.start_date || '-')}</td>
+            <td class="font-inter">${escapeHtml(row.end_date || '-')}</td>
+            <td class="font-inter">${escapeHtml(String(row.students ?? '-'))}</td>
+        `;
+        tr.addEventListener('click', () => openActivityDetail(row.id));
+        tbody.appendChild(tr);
+    });
+}
+
+function updateActivitiesPaginationInfo() {
+    const { start, length, recordsTotal } = activitiesState;
+    const from = recordsTotal === 0 ? 0 : start + 1;
+    const to = Math.min(start + length, recordsTotal);
+    document.getElementById('activities-page-info').textContent = `${from}-${to} من ${recordsTotal.toLocaleString('en-US')}`;
+    document.getElementById('activities-count-label').textContent = `إجمالي الأنشطة: ${recordsTotal.toLocaleString('en-US')}`;
+
+    document.getElementById('activities-prev-btn').disabled = start <= 0;
+    document.getElementById('activities-next-btn').disabled = start + length >= recordsTotal;
+}
+
+function openActivityDetail(activityId) {
+    openActivityDetailModal();
+    const body = document.getElementById('activity-detail-body');
+    body.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>جاري جلب التفاصيل...</p></div>`;
+
+    fetch(`/api/activity/${encodeURIComponent(activityId)}`)
+        .then((r) => r.json())
+        .then((res) => {
+            if (res.status !== 'success') {
+                body.innerHTML = `<div class="empty-state">تعذر جلب التفاصيل: ${escapeHtml(res.error_message || 'النشاط غير موجود')}</div>`;
+                return;
+            }
+            renderActivityDetail(res.data);
+        })
+        .catch((err) => {
+            body.innerHTML = `<div class="empty-state">تعذر الاتصال بالخادم: ${escapeHtml(err.message)}</div>`;
+        });
+}
+
+function renderActivityDetail(d) {
+    const body = document.getElementById('activity-detail-body');
+
+    const field = (label, value) => `
+        <div class="detail-field">
+            <span class="detail-label">${label}</span>
+            <span class="detail-value">${escapeHtml(value && String(value).trim() ? value : '-')}</span>
+        </div>`;
+
+    let attachmentsHtml = '<span class="detail-value">لا يوجد مرفقات</span>';
+    if (d.attachments && d.attachments.length) {
+        attachmentsHtml = d.attachments
+            .map((a) => `<a href="${escapeHtml(a.href)}" target="_blank" rel="noopener" class="attachment-link"><i class="fa-solid fa-paperclip"></i> ${escapeHtml(a.label)}</a>`)
+            .join('');
+    }
+
+    body.innerHTML = `
+        <h3 class="detail-activity-title">${escapeHtml(d.name || '-')}</h3>
+
+        <div class="detail-grid">
+            ${field('الجامعة', d.university)}
+            ${field('الكلية', d.college)}
+            ${field('طبيعة النشاط', d.nature)}
+            ${field('نوع النشاط', d.type)}
+            ${field('حالة النشاط', d.status)}
+            ${field('تاريخ بداية النشاط', d.start_date)}
+            ${field('تاريخ نهاية النشاط', d.end_date)}
+            ${field('تم التكليف من قبل', d.assigned_by)}
+        </div>
+
+        <div class="detail-section">
+            <h4><i class="fa-solid fa-align-right"></i> وصف النشاط</h4>
+            <p class="detail-description">${escapeHtml(d.description && d.description.trim() ? d.description : 'لا يوجد وصف')}</p>
+        </div>
+
+        <div class="detail-section">
+            <h4><i class="fa-solid fa-users"></i> الطلاب</h4>
+            <div class="students-grid">
+                <div class="student-stat"><span class="num font-inter">${escapeHtml(String(d.students_expatriates ?? '-'))}</span><span class="lbl">وافدين</span></div>
+                <div class="student-stat"><span class="num font-inter">${escapeHtml(String(d.students_egyptians ?? '-'))}</span><span class="lbl">مصريين</span></div>
+                <div class="student-stat"><span class="num font-inter">${escapeHtml(String(d.students_special_needs ?? '-'))}</span><span class="lbl">ذوي الاحتياجات</span></div>
+                <div class="student-stat student-stat-total"><span class="num font-inter">${escapeHtml(String(d.students_total ?? '-'))}</span><span class="lbl">الإجمالي</span></div>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h4><i class="fa-solid fa-paperclip"></i> المرفقات</h4>
+            <div class="attachments-list">${attachmentsHtml}</div>
+        </div>
+    `;
+}
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}

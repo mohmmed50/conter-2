@@ -255,7 +255,13 @@ function renderTable() {
         // Match Zagazig National University specifically (matching 'الزقازيق' and 'اهلي' to separate from public university)
         const isZNU = row.name.includes('الزقازيق') && (row.name.includes('اهلي') || row.name.includes('أهلي'));
         if (isZNU) {
-            tr.classList.add('znu-row');
+            tr.classList.add('znu-row', 'clickable-row');
+            tr.title = 'اضغط لعرض كل الأنشطة';
+            tr.addEventListener('click', () => {
+                if (typeof openActivitiesModal === 'function') {
+                    openActivitiesModal();
+                }
+            });
         }
 
         tr.innerHTML = `
@@ -263,6 +269,7 @@ function renderTable() {
             <td class="text-right">
                 ${isZNU ? '<i class="fa-solid fa-star" style="color: var(--accent-gold); margin-left: 0.4rem;"></i>' : ''}
                 ${row.name}
+                ${isZNU ? '<i class="fa-solid fa-arrow-up-left-and-arrow-down-right-from-center row-hint-icon"></i>' : ''}
             </td>
             <td class="font-inter">${Number(row.activities).toLocaleString('en-US')}</td>
         `;
