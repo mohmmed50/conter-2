@@ -37,6 +37,14 @@ stats_cache = {
     "error_message": None
 }
 
+# Shared, server-side "flagged for deletion" list. Deliberately a plain in-memory
+# dict (not a per-user/browser store) so every visitor sees the same flags. Note:
+# on Vercel this lives only as long as the serverless instance stays warm -- it is
+# not a durable database. Fine for a small team reviewing candidates together; if
+# it ever needs to survive cold starts reliably, swap this for a real datastore.
+flagged_lock = threading.Lock()
+flagged_activities = {}  # activity_id -> {id, name, start_date, end_date, students, flagged_at}
+
 # Target system credentials and endpoints
 LOGIN_URL = "https://studentact.scu.eg/system/logins.php"
 STATS_URL = "https://studentact.scu.eg/system/univ/takrerstat.php"
@@ -438,6 +446,58 @@ def get_activity_detail(activity_id):
     except Exception as e:
         logger.error(f"Error fetching activity detail for {activity_id}: {e}")
         return jsonify({"status": "error", "error_message": str(e)}), 500
+
+
+@app.route('/api/flagged', methods=['GET'])
+def get_flagged():
+    """Returns the shared list of activities flagged for deletion (visible to everyone)."""
+    with flagged_lock:
+        items = list(flagged_activities.values())
+    return jsonify({"status": "success", "data": items})
+
+
+@app.route('/api/flagged', methods=['POST'])
+def toggle_flagged():
+    """Flags or unflags one activity. Shared server-side, so every visitor sees the change."""
+    payload = request.get_json(silent=True) or {}
+    activity_id = str(payload.get('id') or '').strip()
+    if not activity_id:
+        return jsonify({"status": "error", "error_message": "Missing activity id"}), 400
+
+    with flagged_lock:
+        if activity_id in flagged_activities:
+            del flagged_activities[activity_id]
+            flagged = False
+        else:
+            flagged_activities[activity_id] = {
+                "id": activity_id,
+                "name": payload.get("name"),
+                "start_date": payload.get("start_date"),
+                "end_date": payload.get("end_date"),
+                "students": payload.get("students"),
+                "flagged_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            flagged = True
+        items = list(flagged_activities.values())
+
+    return jsonify({"status": "success", "flagged": flagged, "data": items})
+
+
+@app.route('/api/flagged/<activity_id>', methods=['DELETE'])
+def remove_flagged(activity_id):
+    """Removes a single activity from the shared flagged list."""
+    with flagged_lock:
+        flagged_activities.pop(str(activity_id), None)
+        items = list(flagged_activities.values())
+    return jsonify({"status": "success", "data": items})
+
+
+@app.route('/api/flagged/clear', methods=['POST'])
+def clear_flagged():
+    """Empties the shared flagged list entirely."""
+    with flagged_lock:
+        flagged_activities.clear()
+    return jsonify({"status": "success", "data": []})
 
 
 if __name__ == '__main__':

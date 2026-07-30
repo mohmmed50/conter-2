@@ -42,53 +42,72 @@ function prefetchNextPage() {
         });
 }
 
-// ---- Flagged-for-deletion list (stored client-side only, in this browser) ----
-const FLAGGED_STORAGE_KEY = 'znu_flagged_for_deletion';
+// ---- Flagged-for-deletion list ----
+// Shared server-side (not per-browser): stored in a global variable on the Flask
+// app itself, so every visitor sees the same flags. See /api/flagged in app.py.
 
-function getFlaggedList() {
-    try {
-        return JSON.parse(localStorage.getItem(FLAGGED_STORAGE_KEY)) || [];
-    } catch (e) {
-        return [];
-    }
-}
-
-function saveFlaggedList(list) {
-    localStorage.setItem(FLAGGED_STORAGE_KEY, JSON.stringify(list));
-    updateFlaggedBadge();
-}
+// Local mirror of the server list, kept in sync after every fetch/toggle so the
+// UI (badge, detail button state) doesn't need a network round-trip for every read.
+let flaggedListCache = [];
 
 function isFlagged(activityId) {
-    return getFlaggedList().some((a) => a.id === activityId);
+    return flaggedListCache.some((a) => a.id === activityId);
+}
+
+function refreshFlaggedCache() {
+    return fetch('/api/flagged')
+        .then((r) => r.json())
+        .then((res) => {
+            if (res.status === 'success') {
+                flaggedListCache = res.data || [];
+            }
+            updateFlaggedBadge();
+            return flaggedListCache;
+        })
+        .catch(() => flaggedListCache);
 }
 
 function toggleFlag(activity) {
-    const list = getFlaggedList();
-    const idx = list.findIndex((a) => a.id === activity.id);
-    if (idx >= 0) {
-        list.splice(idx, 1);
-    } else {
-        list.push(activity);
-    }
-    saveFlaggedList(list);
-    return idx < 0; // true = just flagged, false = just unflagged
+    return fetch('/api/flagged', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(activity),
+    })
+        .then((r) => r.json())
+        .then((res) => {
+            if (res.status === 'success') {
+                flaggedListCache = res.data || [];
+                updateFlaggedBadge();
+                return res.flagged;
+            }
+            return isFlagged(activity.id);
+        })
+        .catch(() => isFlagged(activity.id));
 }
 
 function removeFlagged(activityId) {
-    saveFlaggedList(getFlaggedList().filter((a) => a.id !== activityId));
-    renderFlaggedTable();
+    fetch(`/api/flagged/${encodeURIComponent(activityId)}`, { method: 'DELETE' })
+        .then((r) => r.json())
+        .then((res) => {
+            if (res.status === 'success') {
+                flaggedListCache = res.data || [];
+                updateFlaggedBadge();
+                renderFlaggedTable();
+            }
+        });
 }
 
 function updateFlaggedBadge() {
-    const count = getFlaggedList().length;
     const badge = document.getElementById('flagged-count-badge');
-    if (badge) badge.textContent = count;
+    if (badge) badge.textContent = flaggedListCache.length;
 }
 
 function openFlaggedModal() {
     document.getElementById('flagged-modal').classList.remove('hidden');
     document.body.classList.add('modal-open');
-    renderFlaggedTable();
+    const tbody = document.getElementById('flagged-table-body');
+    tbody.innerHTML = `<tr><td colspan="4" class="loading-state"><div class="spinner"></div></td></tr>`;
+    refreshFlaggedCache().then(renderFlaggedTable);
 }
 
 function closeFlaggedModal() {
@@ -97,7 +116,7 @@ function closeFlaggedModal() {
 }
 
 function renderFlaggedTable() {
-    const list = getFlaggedList();
+    const list = flaggedListCache;
     const tbody = document.getElementById('flagged-table-body');
     document.getElementById('flagged-count-label').textContent = `إجمالي المحدد للحذف: ${list.length}`;
 
@@ -121,14 +140,14 @@ function renderFlaggedTable() {
 }
 
 function exportFlaggedCsv() {
-    const list = getFlaggedList();
+    const list = flaggedListCache;
     if (!list.length) return;
 
-    const header = ['activity_id', 'name', 'start_date', 'end_date', 'students'];
+    const header = ['activity_id', 'name', 'start_date', 'end_date', 'students', 'flagged_at'];
     const escapeCsv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = [header.join(',')];
     list.forEach((a) => {
-        lines.push([a.id, a.name, a.start_date, a.end_date, a.students].map(escapeCsv).join(','));
+        lines.push([a.id, a.name, a.start_date, a.end_date, a.students, a.flagged_at].map(escapeCsv).join(','));
     });
 
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
@@ -147,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const detailModal = document.getElementById('activity-detail-modal');
     const flaggedModal = document.getElementById('flagged-modal');
 
-    updateFlaggedBadge();
+    refreshFlaggedCache();
 
     document.getElementById('activities-modal-close').addEventListener('click', closeActivitiesModal);
     document.getElementById('activity-detail-modal-close').addEventListener('click', closeActivityDetailModal);
@@ -155,10 +174,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('open-flagged-btn').addEventListener('click', openFlaggedModal);
     document.getElementById('export-flagged-btn').addEventListener('click', exportFlaggedCsv);
     document.getElementById('clear-flagged-btn').addEventListener('click', () => {
-        if (confirm('هل أنت متأكد من إفراغ قائمة الأنشطة المحددة للحذف بالكامل؟')) {
-            saveFlaggedList([]);
-            renderFlaggedTable();
-        }
+        if (!confirm('هل أنت متأكد من إفراغ قائمة الأنشطة المحددة للحذف بالكامل؟ (هيتشال للجميع)')) return;
+        fetch('/api/flagged/clear', { method: 'POST' })
+            .then((r) => r.json())
+            .then((res) => {
+                if (res.status === 'success') {
+                    flaggedListCache = res.data || [];
+                    updateFlaggedBadge();
+                    renderFlaggedTable();
+                }
+            });
     });
 
     activitiesModal.addEventListener('click', (e) => {
@@ -307,9 +332,11 @@ function openActivityDetail(activityId) {
     const body = document.getElementById('activity-detail-body');
     body.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>جاري جلب التفاصيل...</p></div>`;
 
-    fetch(`/api/activity/${encodeURIComponent(activityId)}`)
-        .then((r) => r.json())
-        .then((res) => {
+    Promise.all([
+        fetch(`/api/activity/${encodeURIComponent(activityId)}`).then((r) => r.json()),
+        refreshFlaggedCache(), // pick up flags made by other visitors before painting the button
+    ])
+        .then(([res]) => {
             if (res.status !== 'success') {
                 body.innerHTML = `<div class="empty-state">تعذر جلب التفاصيل: ${escapeHtml(res.error_message || 'النشاط غير موجود')}</div>`;
                 return;
@@ -396,8 +423,11 @@ function renderActivityDetail(d) {
     };
 
     flagBtn.addEventListener('click', () => {
-        toggleFlag(flaggedActivity);
-        paintFlagButton();
+        flagBtn.disabled = true;
+        toggleFlag(flaggedActivity).finally(() => {
+            flagBtn.disabled = false;
+            paintFlagButton();
+        });
     });
 
     paintFlagButton();
